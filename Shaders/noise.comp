@@ -1,0 +1,80 @@
+#version 450
+uniform sampler2D permTexture;
+uniform writeonly image2D noiseImg;
+
+layout( local_size_x = 32, local_size_y = 32 ) in;
+
+uint pack_rgba(vec4 heightvec){
+    vec4 int_vec = vec4(int(255 * heightvec.r), int(255 * heightvec.g), int(255 * heightvec.b), int(255 * heightvec.a));
+    return uint(int(int_vec.r)<<24|int(int_vec.g)<<16|int(int_vec.b)<<8|int(int_vec.a));
+}
+
+vec4 unpack_rgba(uint a) {
+    return vec4(a>>24 & 255 , a >>16 & 255, a >>8 & 255, a >>0 & 255) / 255.0;
+}
+
+//IMPLEMENTATION BUILT OFF Stefan Gustavson'S IMPROVED NOISE CODE. - MIT LICENCE
+//PAPER USED: http://weber.itn.liu.se/~stegu/simplexnoise/simplexnoise.pdf
+#define ONE 0.00390625
+#define ONEHALF 0.001953125
+#define F2 0.366025403784
+#define G2 0.211324865405
+
+float snoise(const in vec2 P) {
+    float s = (P.x + P.y) * F2;   
+    vec2 Pi = floor(P + s);
+    float t = (Pi.x + Pi.y) * G2; 
+    vec2 P0 = Pi - t; 
+    Pi = Pi * ONE + ONEHALF; 
+
+    vec2 Pf0 = P - P0; 
+    vec2 o1;
+    if(Pf0.x > Pf0.y) o1 = vec2(1.0, 0.0);
+    else o1 = vec2(0.0, 1.0);               
+
+    vec2 grad0 = texture2D(permTexture, Pi).rg * 4.0 - 1.0;
+    float t0 = 0.5 - dot(Pf0, Pf0);
+    float n0;
+    if (t0 < 0.0) n0 = 0.0;
+    else {
+        t0 *= t0;
+        n0 = t0 * t0 * dot(grad0, Pf0);
+    }
+
+    vec2 Pf1 = Pf0 - o1 + G2;
+    vec2 grad1 = texture2D(permTexture, Pi + o1*ONE).rg * 4.0 - 1.0;
+    float t1 = 0.5 - dot(Pf1, Pf1);
+    float n1;
+    if (t1 < 0.0) n1 = 0.0;
+    else {
+        t1 *= t1;
+        n1 = t1 * t1 * dot(grad1, Pf1);
+    }
+  
+    vec2 Pf2 = Pf0 - vec2(1.0-2.0*G2);
+    vec2 grad2 = texture2D(permTexture, Pi + vec2(ONE, ONE)).rg * 4.0 - 1.0;
+    float t2 = 0.5 - dot(Pf2, Pf2);
+    float n2;
+    if(t2 < 0.0) n2 = 0.0;
+    else {
+        t2 *= t2;
+        n2 = t2 * t2 * dot(grad2, Pf2);
+    }
+
+    return 70.0 * (n0 + n1 + n2);
+}
+
+
+void main() {
+    vec2 vertex = gl_GlobalInvocationID.xy;
+    vertex = vec2(-5.0,-5.0) + (vertex / 102.4);
+    double n = 0.5*snoise(2.0*vertex.xy) + 0.25*snoise(4.0*vertex.xy) + 0.125*snoise(8.0*vertex.xy) + 0.0625 * snoise(16.0* vertex.xy);
+    //double n = 0.5*noise1(2.0*vertex.xy) + 0.25*noise1(4.0*vertex.xy) + 0.125*noise1(8.0*vertex.xy) + 0.0625 * noise1(16.0* vertex.xy);
+    //double height = n;
+    vec4 height = unpack_rgba(uint(0.5*(n+1.0) * 4294967294.0));
+    imageStore(noiseImg, ivec2(gl_GlobalInvocationID.xy), height);
+
+    // ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    // float val=0.5+0.5*sin((pos.x+pos.y)/30.0);
+    // imageStore(destTex, pos, vec4(val, val, val, 1.0f));
+}
