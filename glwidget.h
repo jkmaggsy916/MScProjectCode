@@ -69,6 +69,8 @@ private:
     void initializeHeightMapShader();
     void initializeDeformationCompute();
 
+    void initGradTexture(GLuint* texID);
+
     void initAndRunNoise();
 
 	void runFallingSnow();
